@@ -7,7 +7,7 @@ import type {
 } from '../../../shared/github/project-types'
 import type { GitHubProjectViewError } from '../../../shared/github/project-result-types'
 import { githubProjectHost } from '../../../shared/github/project-identity'
-import { driftError } from './project-error-classification'
+import { driftError, extractGraphqlErrors } from './project-error-classification'
 import { projectGhExecOptions, runGraphql, type GraphqlVars } from './internals'
 import { normalizeField, type RawProjectV2Field } from './project-view-field-normalization'
 import { FIELD_CONFIG_FRAGMENT } from './project-view-query-fragments'
@@ -50,14 +50,24 @@ export type RawProjectView = {
 // the board renderer falls back to the Status field when config is absent.
 const hostsWithoutVerticalGroupBy = new Set<string>()
 
+/** Test-only: capability state is module-level so real runs memoize per host. */
+export function resetVerticalGroupByCapabilityForTests(): void {
+  hostsWithoutVerticalGroupBy.clear()
+}
+
 function verticalGroupBySelection(host: string | undefined): string {
-  return hostsWithoutVerticalGroupBy.has(githubProjectHost(host) ?? 'github.com')
+  return hostsWithoutVerticalGroupBy.has(githubProjectHost(host))
     ? ''
     : 'verticalGroupByFields(first:10) { nodes { ...FieldConfig } }'
 }
 
 function errorsIndicateVerticalGroupBy(raw: { stderr: string; stdout: string }): boolean {
-  return `${raw.stdout}\n${raw.stderr}`.includes('verticalGroupByFields')
+  // Why: partial-error responses echo the whole data body in raw.stdout, which
+  // contains this field name as a plain KEY on perfectly healthy schemas — only
+  // the parsed GraphQL error messages can identify an unknown-field rejection.
+  return extractGraphqlErrors(raw.stderr, raw.stdout).some((error) =>
+    (error.message ?? '').includes('verticalGroupByFields')
+  )
 }
 
 export function ownerQueryRoot(ownerType: GitHubProjectOwnerType): string {
@@ -118,7 +128,7 @@ export async function fetchProjectViewsPage(args: {
     projectGhExecOptions(args.host)
   )
   if (!res.ok && errorsIndicateVerticalGroupBy(res.raw)) {
-    hostsWithoutVerticalGroupBy.add(githubProjectHost(args.host) ?? 'github.com')
+    hostsWithoutVerticalGroupBy.add(githubProjectHost(args.host))
     res = await runGraphql<Record<string, { projectV2?: RawProjectConfig | null } | null>>(
       buildQuery(),
       vars,

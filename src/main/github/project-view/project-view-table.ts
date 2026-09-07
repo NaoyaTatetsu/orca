@@ -2,6 +2,7 @@ import type { GetProjectViewTableArgs } from '../../../shared/github/project-req
 import type { GetProjectViewTableResult } from '../../../shared/github/project-result-types'
 import type { GitHubProjectTable } from '../../../shared/github/project-types'
 import { githubProjectHost } from '../../../shared/github/project-identity'
+import { isRenderableProjectViewLayout } from '../../../shared/github/project-types'
 import { assertPositiveInt, assertSlug } from './internals'
 import {
   fetchProjectViewsPage,
@@ -121,13 +122,9 @@ export async function getProjectViewTable(
     typeof args.queryOverride === 'string' ? args.queryOverride : selectedView.filter
 
   // Why: boards and roadmaps read the same item stream as a table — only the
-  // renderer differs. Allowlist: raw.layout is cast unchecked, so a future
-  // GitHub layout must reject cleanly, not render as a table.
-  if (
-    selectedView.layout !== 'TABLE_LAYOUT' &&
-    selectedView.layout !== 'ROADMAP_LAYOUT' &&
-    selectedView.layout !== 'BOARD_LAYOUT'
-  ) {
+  // renderer differs. Unknown future layouts must reject cleanly, not render
+  // as a table.
+  if (!isRenderableProjectViewLayout(selectedView.layout)) {
     const count = await fetchItemsCountOnly({
       owner: args.owner,
       ownerType: args.ownerType,

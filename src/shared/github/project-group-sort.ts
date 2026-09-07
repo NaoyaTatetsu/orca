@@ -22,7 +22,7 @@ export type ProjectGroup = {
   rows: GitHubProjectRow[]
 }
 
-const EMPTY_GROUP_KEY = '__empty__'
+export const EMPTY_PROJECT_GROUP_KEY = '__empty__'
 
 type ProjectFieldValue = GitHubProjectRow['fieldValuesByFieldId'][string]
 
@@ -60,7 +60,7 @@ function getFieldValueForGrouping(
   const value = row.fieldValuesByFieldId[field.id]
   if (!hasNonEmptyFieldValue(value)) {
     return {
-      key: EMPTY_GROUP_KEY,
+      key: EMPTY_PROJECT_GROUP_KEY,
       label: labelForEmpty(field),
       orderHint: UNKNOWN_INDEX_SENTINEL,
       iteration: null
@@ -126,9 +126,6 @@ export function groupRows(
   return groupRowsByField(groupField, rowsInOrder)
 }
 
-/** Sentinel key of the trailing no-value group/column. */
-export const EMPTY_PROJECT_GROUP_KEY = EMPTY_GROUP_KEY
-
 /** Buckets rows by an explicit field — the table view's groupBy and the board
  *  view's column field share this so both order and label groups identically. */
 export function groupRowsByField(
@@ -156,10 +153,10 @@ export function groupRowsByField(
   const entries = Array.from(buckets.entries())
   // Ordering rules per design doc §Grouping.
   entries.sort((a, b) => {
-    if (a[0] === EMPTY_GROUP_KEY) {
+    if (a[0] === EMPTY_PROJECT_GROUP_KEY) {
       return 1
     }
-    if (b[0] === EMPTY_GROUP_KEY) {
+    if (b[0] === EMPTY_PROJECT_GROUP_KEY) {
       return -1
     }
     if (groupField.kind === 'iteration' || groupField.kind === 'single-select') {

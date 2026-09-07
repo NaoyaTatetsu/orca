@@ -9,15 +9,13 @@ type Props = {
   draggable: boolean
   onOpenDialog?: () => void
   onDragStart: (event: React.DragEvent<HTMLDivElement>) => void
-  onDragEnd: () => void
 }
 
 export default function ProjectBoardCard({
   row,
   draggable,
   onOpenDialog,
-  onDragStart,
-  onDragEnd
+  onDragStart
 }: Props): React.JSX.Element {
   const restricted = row.itemType === 'REDACTED'
   // Why: mirrors the roadmap bar — a redacted card must never render or
@@ -39,7 +37,6 @@ export default function ProjectBoardCard({
       role="listitem"
       draggable={draggable}
       onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
       aria-label={
         row.content.number == null
           ? title
@@ -62,7 +59,7 @@ export default function ProjectBoardCard({
             <button
               type="button"
               onClick={onOpenDialog}
-              className="block w-full text-left text-xs font-medium leading-snug hover:underline"
+              className="block w-full cursor-pointer text-left text-xs font-medium leading-snug hover:underline"
             >
               <span className="line-clamp-2">{title}</span>
             </button>
@@ -100,7 +97,7 @@ export default function ProjectBoardCard({
                 <span
                   key={user.login}
                   title={user.login}
-                  className="flex size-4 items-center justify-center rounded-full border border-background bg-muted text-[8px] uppercase"
+                  className="flex size-4 items-center justify-center rounded-full border border-background bg-muted text-[9px] uppercase"
                 >
                   {user.login.charAt(0)}
                 </span>

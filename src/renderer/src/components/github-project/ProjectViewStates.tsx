@@ -5,6 +5,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/h
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
 import { GhAuthErrorHelp } from './GhAuthErrorHelp'
+import { isRenderableProjectViewLayout } from '../../../../shared/github/project-types'
 import type { GitHubProjectViewSummary } from '../../../../shared/github/project-types'
 import type { GitHubProjectViewError } from '../../../../shared/github/project-result-types'
 
@@ -42,12 +43,7 @@ function ProjectViewTab({
   active: boolean
   onPick: (viewId: string) => void
 }): React.JSX.Element {
-  // Why: allowlist, not denylist — raw.layout is cast unchecked, so a future
-  // GitHub layout value must stay disabled instead of masquerading as a table.
-  const supported =
-    view.layout === 'TABLE_LAYOUT' ||
-    view.layout === 'ROADMAP_LAYOUT' ||
-    view.layout === 'BOARD_LAYOUT'
+  const supported = isRenderableProjectViewLayout(view.layout)
   const layoutLabel =
     view.layout === 'BOARD_LAYOUT'
       ? 'Board'

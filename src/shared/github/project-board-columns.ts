@@ -24,7 +24,10 @@ export type ProjectBoardColumn = {
 
 export function resolveBoardColumnField(view: GitHubProjectView): GitHubProjectField | null {
   const vertical = view.verticalGroupByFields?.[0]
-  if (vertical) {
+  // Why: only these kinds yield real drop targets — a drifted non-select field
+  // here would render read-only buckets whose no-value column still CLEARS an
+  // arbitrary field on drop. Fall back to Status instead.
+  if (vertical && (vertical.kind === 'single-select' || vertical.kind === 'iteration')) {
     return vertical
   }
   // Why: views cached before `verticalGroupByFields` was queried (or hosts

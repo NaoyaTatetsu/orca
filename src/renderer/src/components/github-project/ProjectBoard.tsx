@@ -98,8 +98,15 @@ export default function ProjectBoard({
       event.preventDefault()
       moveRow(rowId, column)
     }
+    // Why: a mid-drag re-render can detach the source card, and Chromium may
+    // never deliver its dragend — clean up at the document, not the card.
+    const handleDocumentDragEnd = (): void => setDropTarget(null)
     document.addEventListener('drop', handleDocumentDrop, true)
-    return () => document.removeEventListener('drop', handleDocumentDrop, true)
+    document.addEventListener('dragend', handleDocumentDragEnd, true)
+    return () => {
+      document.removeEventListener('drop', handleDocumentDrop, true)
+      document.removeEventListener('dragend', handleDocumentDragEnd, true)
+    }
   }, [columns, moveRow])
 
   if (!field) {
@@ -146,7 +153,6 @@ export default function ProjectBoard({
           onDragLeaveOrEnd={() =>
             setDropTarget((current) => (current === column.key ? null : current))
           }
-          onClearDropTarget={() => setDropTarget(null)}
         />
       ))}
     </div>
@@ -158,15 +164,13 @@ function BoardColumn({
   highlighted,
   onOpenDialog,
   onDragEnter,
-  onDragLeaveOrEnd,
-  onClearDropTarget
+  onDragLeaveOrEnd
 }: {
   column: ProjectBoardColumn
   highlighted: boolean
   onOpenDialog?: (row: GitHubProjectRow) => void
   onDragEnter: () => void
   onDragLeaveOrEnd: () => void
-  onClearDropTarget: () => void
 }): React.JSX.Element {
   const colors = column.color ? singleSelectChipColors(column.color) : null
   return (
@@ -199,8 +203,14 @@ function BoardColumn({
         {colors ? (
           <span
             aria-hidden
-            className="size-2 shrink-0 rounded-full"
-            style={{ backgroundColor: colors.fgLight, boxShadow: `0 0 0 3px ${colors.bg}` }}
+            className="size-2 shrink-0 rounded-full bg-[var(--github-project-chip-fg-light)] dark:bg-[var(--github-project-chip-fg-dark)]"
+            style={
+              {
+                '--github-project-chip-fg-light': colors.fgLight,
+                '--github-project-chip-fg-dark': colors.fgDark,
+                boxShadow: `0 0 0 3px ${colors.bg}`
+              } as React.CSSProperties
+            }
           />
         ) : null}
         <span className="truncate font-medium">{column.label}</span>
@@ -221,7 +231,6 @@ function BoardColumn({
             }}
             // Why: a cancelled drag (Esc, drop outside any column) fires no
             // drop event anywhere — dragend is the only reliable cleanup hook.
-            onDragEnd={onClearDropTarget}
           />
         ))}
       </div>

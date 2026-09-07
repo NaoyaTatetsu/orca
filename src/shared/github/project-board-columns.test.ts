@@ -92,6 +92,17 @@ describe('resolveBoardColumnField', () => {
     expect(resolveBoardColumnField(view({ fields: [priority] }))).toBe(priority)
   })
 
+  it('ignores a non-select vertical field instead of building clear-only columns', () => {
+    const textField: GitHubProjectField = {
+      kind: 'field',
+      id: 'f_text',
+      name: 'Notes',
+      dataType: 'TEXT'
+    }
+    const v = view({ fields: [STATUS_FIELD], verticalGroupByFields: [textField] })
+    expect(resolveBoardColumnField(v)).toBe(STATUS_FIELD)
+  })
+
   it('returns null when nothing can shape columns', () => {
     expect(
       resolveBoardColumnField(
