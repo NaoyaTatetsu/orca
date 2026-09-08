@@ -67,9 +67,52 @@ describe('AgentSessionSubscribers', () => {
           removedItemIds: [],
           submissions: []
         },
-        fence: 7
+        fence: 7,
+        activity: null
       }
     ])
+  })
+
+  it('includes catalogs on reconnect and sends an idle checkpoint without journal work', async () => {
+    const journal = await journals.open({
+      identity: {
+        sessionId: SESSION,
+        workspaceId: 'workspace-1',
+        hostId: 'local',
+        agent: 'codex',
+        providerHandle: { kind: 'codex', threadId: 'thread-1' }
+      },
+      journalDir: join(root, 'catalog-journal')
+    })
+    let commands = [{ name: 'first', kind: 'skill' as const }]
+    const events: AgentSessionSubscribeEvent[] = []
+    const subscribers = new AgentSessionSubscribers({ readCommands: () => commands })
+    subscribers.open({
+      id: 'one',
+      sessionId: SESSION,
+      journal,
+      fence: 7,
+      emit: (event) => events.push(event)
+    })
+    expect(events[0]).toMatchObject({ type: 'snapshot', commands })
+    commands = [{ name: 'second', kind: 'skill' as const }]
+    subscribers.publish(SESSION, journal)
+    expect(events[1]).toEqual({
+      type: 'batch',
+      sessionId: SESSION,
+      fence: 7,
+      commands,
+      batch: { cursor: journal.cursor(), items: [], removedItemIds: [], submissions: [] }
+    })
+    subscribers.open({
+      id: 'two',
+      sessionId: SESSION,
+      journal,
+      cursor: journal.cursor(),
+      fence: 7,
+      emit: (event) => events.push(event)
+    })
+    expect(events[2]).toMatchObject({ type: 'batch', commands })
   })
 
   it('reports every content publication to the journal hook, subscribed or not', async () => {
@@ -252,6 +295,56 @@ describe('AgentSessionSubscribers', () => {
     subscribers.publish(SESSION, journal)
 
     expect(events.at(-1)).toMatchObject({ type: 'batch', fence: 2 })
+  })
+
+  it('publishes latest turn activity without advancing or adding journal rows', async () => {
+    const journal = await journals.open({
+      identity: {
+        sessionId: SESSION,
+        workspaceId: 'workspace-1',
+        hostId: 'local',
+        agent: 'codex',
+        providerHandle: { kind: 'codex', threadId: 'thread-1' }
+      },
+      journalDir: join(root, 'activity-journal')
+    })
+    const subscribers = new AgentSessionSubscribers()
+    const events: AgentSessionSubscribeEvent[] = []
+    subscribers.open({
+      id: 'subscriber-1',
+      sessionId: SESSION,
+      journal,
+      fence: 1,
+      emit: (event) => events.push(event)
+    })
+    const cursor = journal.cursor()
+
+    subscribers.publish(SESSION, journal, {
+      turnId: 'turn-1',
+      text: 'Inspecting the session wire'
+    })
+
+    expect(journal.cursor()).toEqual(cursor)
+    expect(events.at(-1)).toEqual({
+      type: 'batch',
+      sessionId: SESSION,
+      batch: { cursor, items: [], removedItemIds: [], submissions: [] },
+      fence: 1,
+      activity: { turnId: 'turn-1', text: 'Inspecting the session wire' }
+    })
+
+    subscribers.close(SESSION, 'subscriber-1')
+    subscribers.publish(SESSION, journal, null)
+    subscribers.open({
+      id: 'reconnected',
+      sessionId: SESSION,
+      journal,
+      fence: 1,
+      cursor,
+      emit: (event) => events.push(event)
+    })
+    expect(journal.cursor()).toEqual(cursor)
+    expect(events.at(-1)).toMatchObject({ activity: null })
   })
 
   it('catches a subscriber up past a pre-existing unsendable removal with a bounded reset', async () => {

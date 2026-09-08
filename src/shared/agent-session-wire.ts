@@ -1,3 +1,5 @@
+import type { AgentSessionRewindReason, AgentSessionRewindSupport } from './agent-session-rewind'
+import type { AgentSessionConversationCommand } from './agent-session-conversation-command'
 // ─── Structured agent-session wire contract ─────────────────────────────────
 // The shapes `agentSession.*` accepts and publishes. Phase 2 builds provider
 // adapters and clients against exactly these types, so everything here must be
@@ -66,6 +68,11 @@ export type AgentSessionBackgroundTaskState = {
   tasks?: AgentSessionBackgroundTask[]
   /** Optional so clients only send targeted stops to hosts that accept them. */
   supportsTaskStop?: boolean
+}
+
+export type AgentSessionTurnActivity = {
+  turnId: string
+  text: string
 }
 
 /** Backward paging is the client's normal read; 40 matches the page size the
@@ -145,6 +152,10 @@ export type AgentSessionSubscribeEvent =
       fence: number
       handoff?: AgentSessionHandoffStatus
       backgroundTasks?: AgentSessionBackgroundTaskState | null
+      /** Omitted when unchanged; null clears a previous provider catalog. */
+      commands?: AgentSessionSlashCommand[] | null
+      /** Latest provider-authored turn activity; optional for mixed-version hosts. */
+      activity?: AgentSessionTurnActivity | null
     }
   | {
       type: 'batch'
@@ -154,6 +165,10 @@ export type AgentSessionSubscribeEvent =
       fence?: number
       handoff?: AgentSessionHandoffStatus
       backgroundTasks?: AgentSessionBackgroundTaskState | null
+      /** Omitted when unchanged; null clears a previous provider catalog. */
+      commands?: AgentSessionSlashCommand[] | null
+      /** Additive ephemeral state; it never creates or advances journal rows. */
+      activity?: AgentSessionTurnActivity | null
     }
   | {
       type: 'reset'
@@ -163,6 +178,9 @@ export type AgentSessionSubscribeEvent =
       fence: number
       handoff?: AgentSessionHandoffStatus
       backgroundTasks?: AgentSessionBackgroundTaskState | null
+      /** Omitted when unchanged; null clears a previous provider catalog. */
+      commands?: AgentSessionSlashCommand[] | null
+      activity?: AgentSessionTurnActivity | null
     }
   | { type: 'end' }
 
@@ -172,12 +190,20 @@ export type AgentSessionSubscribeEvent =
  *  from the journal so no client has to replay a transcript to learn whether a
  *  turn is running. Additive surface: an older host has no such method. */
 export type AgentSessionStatusSummary = {
+  rewindBlockedReason?: AgentSessionRewindReason
   sessionId: string
   workspaceId: string
   agent: AgentSessionRecord['provider']
   /** Null until the journal holds a persisted user or assistant message. */
   status: StructuredAgentSessionProjectedStatus | null
   latestPrompt: string
+  /** Provider model in force for the next turn; absent until the host has read the options. */
+  model?: string
+  /** The tool the running turn is inside. Absent unless `status` is 'working'. */
+  toolName?: string
+  toolInput?: string
+  /** Preview of the newest assistant prose, so a settled row says what the agent said. */
+  lastAssistantMessage?: string
   providerSession?: AgentProviderSessionMetadata
   updatedAt: number
 }
@@ -235,6 +261,7 @@ export function isAgentSessionWireRefusalCode(
 }
 
 export type AgentSessionWireRefusal = {
+  rewindReason?: AgentSessionRewindReason
   code: AgentSessionWireRefusalCode
   message: string
   /** On a stale fence, so the client can retry without another round trip. */
@@ -305,9 +332,28 @@ export type AgentSessionModelOption = {
   efforts: AgentSessionOptionChoice[]
 }
 
+/** One entry of the `/` menu the running provider reports for itself. `skill`
+ *  marks a name the session loaded as a skill rather than a built-in command;
+ *  commands the provider reserves for a terminal UI are already removed. */
+export type AgentSessionSlashCommand = {
+  name: string
+  kind: 'command' | 'skill'
+  /** Membership is authoritative, but this provider report did not classify the name. */
+  kindUnspecified?: true
+}
+
+/** The provider's own command surface, read per session. Additive read-only
+ *  surface: a host that predates it answers `method_not_found`, and the client
+ *  keeps rendering its curated catalog. */
+export type AgentSessionCommandsResult = {
+  commands?: AgentSessionSlashCommand[]
+}
+
 /** Provider-reported choices and effective next-turn values. Additive read-only
  *  surface so older hosts can reject it without changing structured v1 writes. */
 export type AgentSessionOptionsResult = {
+  rewind?: AgentSessionRewindSupport
+  conversationCommands?: readonly AgentSessionConversationCommand[]
   models: AgentSessionModelOption[]
   current: {
     model: string

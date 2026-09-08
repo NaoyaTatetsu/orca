@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs'
 import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 
@@ -140,6 +139,8 @@ const NATIVE_RUNTIME_PREFIXES = [
   'config/scripts/ensure-native-runtime',
   'config/scripts/rebuild-native-deps',
   'config/scripts/node-pty-job-ownership',
+  'config/scripts/windows-process-tree-creation-time',
+  'config/scripts/windows-process-tree-gyp-rebuild',
   'config/scripts/electron-builder-native-rebuild',
   'config/patches/node-pty@',
   'config/patches/@vscode__windows-process-tree'
@@ -222,8 +223,10 @@ const WINDOWS_PACKAGE_TESTS = [
   'src/main/agent-hooks/windows-hook-payload-delivery.test.ts',
   'src/main/agent-hooks/windows-direct-cmd-hook-command.test.ts',
   'src/main/windows/windows-pty-job.win32.test.ts',
+  'src/main/windows/windows-msys-job.win32.test.ts',
   'src/main/windows/windows-host-job.win32.test.ts',
   'src/main/windows/windows-process-tree-command-line-patch.test.ts',
+  'src/main/windows/windows-process-table-native-addon.win32.test.ts',
   'src/main/windows-live-tree-kill.win32.test.ts',
   'src/main/wsl/wsl-runner.test.ts',
   'src/main/wsl/wsl-guest-environment.test.ts',
@@ -365,7 +368,14 @@ function matchesPrefix(file, prefixes) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const files = readFileSync(0, 'utf8').split('\n').filter(Boolean)
+  // Why streamed, not readFileSync(0): a single read of fd 0 throws EAGAIN once the writer
+  // outgrows the 64 KB pipe buffer, which a stale PR base.sha reaches easily.
+  let input = ''
+  process.stdin.setEncoding('utf8')
+  for await (const chunk of process.stdin) {
+    input += chunk
+  }
+  const files = input.split(/\r?\n/).filter(Boolean)
   const classification = classifyPrJobs(files)
   for (const [name, value] of Object.entries(classification)) {
     process.stdout.write(`${name}=${value ? 'true' : 'false'}\n`)

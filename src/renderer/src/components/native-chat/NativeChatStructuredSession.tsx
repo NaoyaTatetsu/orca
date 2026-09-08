@@ -12,11 +12,11 @@ import { NativeChatMessageList } from './NativeChatMessageList'
 import { NativeChatQuestionCard } from './NativeChatQuestionCard'
 import { selectNativeChatViewState } from './native-chat-view-state'
 import { useNativeChatFontScale } from './use-native-chat-font-scale'
-import { useNativeChatFileLinkClick } from './use-native-chat-file-link-click'
+import { LinkActionPopover } from '@/components/link-actions/LinkActionPopover'
+import { useNativeChatLinkActions } from './use-native-chat-link-actions'
 import { useNativeChatFileLinkContext } from './use-native-chat-file-link-context'
 import { useStructuredAgentSession } from './use-structured-agent-session'
 import { translate } from '@/i18n/i18n'
-import { NativeChatOrchestrationPausedNotice } from './NativeChatOrchestrationPausedNotice'
 import { useNativeChatImageRuntimeContext } from './native-chat-image-runtime-context'
 import { useStructuredNativeChatPaneCommands } from './use-structured-native-chat-pane-commands'
 import type { NativeChatStructuredViewProps } from './native-chat-view-types'
@@ -91,7 +91,11 @@ export function NativeChatStructuredSession(
   const fontScale = useNativeChatFontScale(viewState.kind === 'ready')
   const fileLinkContext = useNativeChatFileLinkContext(props.tabId)
   const imageRuntimeContext = useNativeChatImageRuntimeContext(props.tabId)
-  const fileLinkClick = useNativeChatFileLinkClick(fileLinkContext)
+  const { onLinkClick, linkActionRequest, closeLinkActions } = useNativeChatLinkActions(
+    fileLinkContext,
+    rootRef,
+    { sessionId: props.sessionId, isVisible: props.isVisible }
+  )
   const activeStoppingBackgroundTasks =
     stoppingBackgroundTasks?.sessionId === props.sessionId ? stoppingBackgroundTasks : null
   const prompt = controller.prompts[0] ?? null
@@ -135,16 +139,30 @@ export function NativeChatStructuredSession(
             setOptionPickerRequest((current) => ({ id, sequence: (current?.sequence ?? 0) + 1 }))
             return true
           },
-          setOption: controller.setStructuredOption
+          setOption: controller.setStructuredOption,
+          conversationCommands: controller.conversationCommands,
+          runConversationCommand: controller.runConversationCommand
         }),
       optionsSurface: controller.optionSurface,
+      conversationCommands: controller.conversationCommands,
       optionSnapshot: controller.optionSnapshot,
       optionPickerRequest,
+      sessionCommands: controller.sessionCommands,
       worktreeId: fileLinkContext?.worktreeId,
       onError: setComposerError,
-      runtime: (props.target.kind === 'local' ? 'local' : 'remote') as 'local' | 'remote'
+      runtime: (props.target.kind === 'local' ? 'local' : 'remote') as 'local' | 'remote',
+      sessionId: props.sessionId,
+      runtimeEnvironmentId:
+        props.target.kind === 'local' ? null : (props.target.environmentId ?? null)
     }),
-    [controller, fileLinkContext?.worktreeId, optionPickerRequest, props.agent, props.target.kind]
+    [
+      controller,
+      fileLinkContext?.worktreeId,
+      optionPickerRequest,
+      props.agent,
+      props.sessionId,
+      props.target
+    ]
   )
 
   return (
@@ -164,7 +182,6 @@ export function NativeChatStructuredSession(
       onContextMenuCapture={paneCommands.onContextMenuCapture}
       className="flex h-full min-h-0 w-full flex-col bg-background focus:outline-none"
     >
-      <NativeChatOrchestrationPausedNotice dispatchStatus={props.orchestrationDispatchStatus} />
       <div className="flex min-h-0 flex-1 flex-col">
         {viewState.kind === 'loading' ? (
           <NativeChatEmptyState kind="loading" />
@@ -180,8 +197,9 @@ export function NativeChatStructuredSession(
             fontScale={fontScale.scale}
             workingStartedAt={null}
             showTurnStatus
-            onLinkClick={fileLinkClick}
-            allowFileUriLinks={fileLinkClick !== undefined}
+            turnActivity={controller.turnActivity}
+            onLinkClick={onLinkClick}
+            allowFileUriLinks={onLinkClick !== undefined}
             runtimeContext={imageRuntimeContext}
           />
         )}
@@ -342,6 +360,7 @@ export function NativeChatStructuredSession(
         />
       )}
       {paneCommands.menu}
+      <LinkActionPopover request={linkActionRequest} onClose={closeLinkActions} />
     </div>
   )
 }

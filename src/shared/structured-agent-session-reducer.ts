@@ -5,9 +5,11 @@ import type {
 } from './agent-session-journal-types'
 import type {
   AgentSessionBackgroundTaskState,
+  AgentSessionSlashCommand,
   AgentSessionHandoffStatus,
   AgentSessionHistoryPage,
-  AgentSessionSubscribeEvent
+  AgentSessionSubscribeEvent,
+  AgentSessionTurnActivity
 } from './agent-session-wire'
 
 export type StructuredAgentSessionState = {
@@ -21,6 +23,8 @@ export type StructuredAgentSessionState = {
   error?: string
   handoff: AgentSessionHandoffStatus | null
   backgroundTasks?: AgentSessionBackgroundTaskState | null
+  commands?: AgentSessionSlashCommand[] | null
+  activity?: AgentSessionTurnActivity | null
 }
 
 export type StructuredAgentSessionAction =
@@ -77,7 +81,8 @@ function replacePage(
   page: AgentSessionHistoryPage,
   fence: number,
   handoff?: AgentSessionHandoffStatus,
-  backgroundTasks?: AgentSessionBackgroundTaskState | null
+  backgroundTasks?: AgentSessionBackgroundTaskState | null,
+  activity?: AgentSessionTurnActivity | null
 ): StructuredAgentSessionState {
   return {
     epoch: page.epoch,
@@ -88,6 +93,7 @@ function replacePage(
     hasOlder: page.hasOlder,
     status: 'ready',
     handoff: handoff ?? null,
+    activity: activity ?? null,
     ...(backgroundTasks !== undefined
       ? { backgroundTasks }
       : page.backgroundTasks !== undefined
@@ -182,6 +188,8 @@ export function reduceStructuredAgentSession(
       hasOlder: action.page.hasOlder,
       status: 'ready',
       handoff: state.handoff,
+      ...(sameEpoch ? { commands: state.commands } : {}),
+      ...(sameEpoch && state.activity !== undefined ? { activity: state.activity } : {}),
       ...(action.page.backgroundTasks !== undefined
         ? { backgroundTasks: action.page.backgroundTasks }
         : state.backgroundTasks !== undefined
@@ -205,7 +213,10 @@ export function reduceStructuredAgentSession(
     return state
   }
   if (event.type === 'snapshot' || event.type === 'reset') {
-    return replacePage(event.page, event.fence, event.handoff, event.backgroundTasks)
+    return {
+      ...replacePage(event.page, event.fence, event.handoff, event.backgroundTasks, event.activity),
+      commands: event.commands
+    }
   }
   if (state.epoch !== event.batch.cursor.epoch) {
     return state
@@ -215,6 +226,7 @@ export function reduceStructuredAgentSession(
   }
   const backgroundTasks =
     event.backgroundTasks !== undefined ? event.backgroundTasks : state.backgroundTasks
+  const activity = event.activity !== undefined ? event.activity : state.activity
   const journalUnchanged =
     event.batch.items.length === 0 &&
     event.batch.removedItemIds.length === 0 &&
@@ -224,7 +236,10 @@ export function reduceStructuredAgentSession(
     journalUnchanged &&
     (event.fence === undefined || event.fence === state.fence) &&
     (event.handoff === undefined || event.handoff === state.handoff) &&
+    (event.commands === undefined || event.commands === state.commands) &&
     backgroundTaskStatesEqual(backgroundTasks, state.backgroundTasks) &&
+    activity?.turnId === state.activity?.turnId &&
+    activity?.text === state.activity?.text &&
     state.status === 'ready' &&
     state.error === undefined
   ) {
@@ -243,7 +258,9 @@ export function reduceStructuredAgentSession(
     status: 'ready',
     error: undefined,
     handoff: event.handoff ?? state.handoff,
-    ...(backgroundTasks !== undefined ? { backgroundTasks } : {})
+    commands: event.commands !== undefined ? event.commands : state.commands,
+    ...(backgroundTasks !== undefined ? { backgroundTasks } : {}),
+    ...(activity !== undefined ? { activity } : {})
   }
 }
 
