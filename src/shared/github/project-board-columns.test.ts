@@ -180,6 +180,7 @@ describe('buildBoardColumns', () => {
     ])
     expect(columns.map((c) => c.label)).toEqual(['alice', 'No Assignees'])
     expect(columns[0]?.dropValue).toBeUndefined()
+    expect(columns.at(-1)?.dropValue).toBeUndefined()
     expect(columns.at(-1)?.rows.map((r) => r.id)).toEqual(['b'])
   })
 })

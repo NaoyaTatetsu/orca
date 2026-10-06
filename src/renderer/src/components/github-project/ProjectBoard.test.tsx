@@ -106,7 +106,7 @@ function dragData(rowId: string): { dataTransfer: Partial<DataTransfer> } {
       },
       dropEffect: 'move',
       effectAllowed: 'move'
-    } as unknown as DataTransfer
+    }
   }
 }
 
@@ -144,6 +144,28 @@ describe('ProjectBoard', () => {
     onEditField.mockClear()
     fireEvent.drop(screen.getByTestId('board-column-opt_todo'), dragData('r1'))
     expect(onEditField).not.toHaveBeenCalled()
+  })
+
+  it('commits a drop even when the preload stops propagation at document capture', () => {
+    const preloadDrop = (event: Event) => {
+      event.preventDefault()
+      event.stopPropagation()
+    }
+    document.addEventListener('drop', preloadDrop, true)
+    try {
+      const onEditField = vi.fn()
+      render(
+        <ProjectBoard
+          table={table([STATUS_FIELD], [row('r1', 'Ship it', [])])}
+          onEditField={onEditField}
+          fallback={null}
+        />
+      )
+      fireEvent.drop(screen.getByTestId('board-column-opt_done'), dragData('r1'))
+      expect(onEditField).toHaveBeenCalledOnce()
+    } finally {
+      document.removeEventListener('drop', preloadDrop, true)
+    }
   })
 
   it('clears the field when dropped on the no-value column', () => {
@@ -207,11 +229,39 @@ describe('ProjectBoard', () => {
     expect(screen.getByText('list')).toBeTruthy()
   })
 
-  it('reports an empty filter result instead of drawing empty columns', () => {
-    render(
-      <ProjectBoard table={table([TITLE_FIELD, STATUS_FIELD], [])} fallback={<div>list</div>} />
-    )
+  it('uses the shared empty-state copy for unfiltered and filtered boards', () => {
+    const empty = table([TITLE_FIELD, STATUS_FIELD], [])
+    const { rerender } = render(<ProjectBoard table={empty} fallback={<div>list</div>} />)
+    expect(screen.getByText('This view has no items yet.')).toBeTruthy()
+    expect(screen.queryByText("No items match this view's filter.")).toBeNull()
+    empty.selectedView.filter = 'status:Done'
+    rerender(<ProjectBoard table={{ ...empty }} fallback={<div>list</div>} />)
     expect(screen.getByText("No items match this view's filter.")).toBeTruthy()
-    expect(screen.queryByTestId('board-column-opt_todo')).toBeNull()
+  })
+
+  it('ignores restricted and unknown payloads and deleted-option drops', () => {
+    const onEditField = vi.fn()
+    render(
+      <ProjectBoard
+        table={table(
+          [STATUS_FIELD],
+          [row('r1', '', [], 'REDACTED'), row('r2', 'Old', [status('deleted', 'Archived')])]
+        )}
+        onEditField={onEditField}
+        fallback={<div>list</div>}
+      />
+    )
+    fireEvent.drop(screen.getByTestId('board-column-opt_done'), dragData('r1'))
+    fireEvent.drop(screen.getByTestId('board-column-opt_done'), dragData('unknown'))
+    fireEvent.drop(screen.getByTestId('board-column-deleted'), dragData('r2'))
+    expect(onEditField).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Restricted item').getAttribute('draggable')).toBe('false')
+  })
+
+  it('keeps a board without an edit handler read-only', () => {
+    render(
+      <ProjectBoard table={table([STATUS_FIELD], [row('r1', 'Read only', [])])} fallback={null} />
+    )
+    expect(screen.getByLabelText('#7 — Read only').getAttribute('draggable')).toBe('false')
   })
 })

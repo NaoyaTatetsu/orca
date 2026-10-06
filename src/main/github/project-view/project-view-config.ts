@@ -65,8 +65,12 @@ function errorsIndicateVerticalGroupBy(raw: { stderr: string; stdout: string }):
   // Why: partial-error responses echo the whole data body in raw.stdout, which
   // contains this field name as a plain KEY on perfectly healthy schemas — only
   // the parsed GraphQL error messages can identify an unknown-field rejection.
-  return extractGraphqlErrors(raw.stderr, raw.stdout).some((error) =>
-    (error.message ?? '').includes('verticalGroupByFields')
+  return extractGraphqlErrors(raw.stderr, raw.stdout).some(
+    (error) =>
+      /\bverticalGroupByFields\b/.test(error.message ?? '') &&
+      /(?:doesn't exist|does not exist|cannot query field|unknown field|undefined field)/i.test(
+        error.message ?? ''
+      )
   )
 }
 
@@ -127,7 +131,7 @@ export async function fetchProjectViewsPage(args: {
     vars,
     projectGhExecOptions(args.host)
   )
-  if (!res.ok && errorsIndicateVerticalGroupBy(res.raw)) {
+  if (!res.ok && verticalGroupBySelection(args.host) && errorsIndicateVerticalGroupBy(res.raw)) {
     hostsWithoutVerticalGroupBy.add(githubProjectHost(args.host))
     res = await runGraphql<Record<string, { projectV2?: RawProjectConfig | null } | null>>(
       buildQuery(),

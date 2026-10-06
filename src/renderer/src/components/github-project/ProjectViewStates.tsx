@@ -109,7 +109,7 @@ function ProjectViewTab({
           <p className="text-xs leading-5 text-muted-foreground">
             {message}{' '}
             {translate(
-              'auto.components.github.project.ProjectViewStates.3b96fb68cf',
+              'projectViews.unsupported.switchLayout',
               'Switch to a Table, Board, or Roadmap view to work with this project in Orca.'
             )}
           </p>
@@ -160,7 +160,7 @@ export function ProjectViewErrorState({
         ? // Why: an older paired host still reports roadmaps as unsupported, so this
           // copy must not name the layout — the tab strip already does that.
           translate(
-            'auto.components.github.project.ProjectViewStates.f43574ae9e',
+            'projectViews.unsupported.description',
             'Orca renders table, board, and roadmap project views. This view uses a layout it cannot render yet.'
           )
         : error.type === 'not_found'

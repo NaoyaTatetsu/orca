@@ -134,7 +134,7 @@ function ProjectViewPickerRow({
       : view.layout === 'ROADMAP_LAYOUT'
         ? translate('auto.components.github.project.ProjectPickerPanels.04ec212ccb', 'Roadmap')
         : view.layout === 'BOARD_LAYOUT'
-          ? translate('auto.components.github.project.ProjectPickerPanels.96d5236d02', 'Board')
+          ? translate('projectViews.layout.board', 'Board')
           : // Why: raw.layout is cast unchecked, so a future GitHub layout value
             // lands here — keep it disabled instead of mislabeling it.
             translate(

@@ -21,7 +21,7 @@ export default function ProjectBoardCard({
   // Why: mirrors the roadmap bar — a redacted card must never render or
   // announce an empty name.
   const title = restricted
-    ? translate('auto.components.github.project.ProjectBoardCard.aa5cdf1345', 'Restricted item')
+    ? translate('projectBoardCard.restrictedItem', 'Restricted item')
     : row.content.title
   const clickable = !restricted && row.itemType !== 'DRAFT_ISSUE'
   const Glyph =
@@ -40,14 +40,13 @@ export default function ProjectBoardCard({
       aria-label={
         row.content.number == null
           ? title
-          : translate(
-              'auto.components.github.project.ProjectBoardCard.325bbbf366',
-              '{{value0}} — {{value1}}',
-              { value0: `#${row.content.number}`, value1: title }
-            )
+          : translate('projectBoardCard.itemLabel', '{{number}} — {{title}}', {
+              number: `#${row.content.number}`,
+              title
+            })
       }
       className={cn(
-        'rounded-md border border-border/60 bg-background p-2 shadow-xs',
+        'rounded-md border border-border/60 bg-card text-card-foreground p-2 shadow-xs',
         draggable && 'cursor-grab active:cursor-grabbing',
         restricted && 'opacity-60'
       )}
@@ -73,7 +72,7 @@ export default function ProjectBoardCard({
               {title}
             </span>
           )}
-          <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground">
+          <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
             {row.content.number == null ? null : (
               <span className="shrink-0">#{row.content.number}</span>
             )}
@@ -97,7 +96,7 @@ export default function ProjectBoardCard({
                 <span
                   key={user.login}
                   title={user.login}
-                  className="flex size-4 items-center justify-center rounded-full border border-background bg-muted text-[9px] uppercase"
+                  className="flex size-4 items-center justify-center rounded-full border border-background bg-muted text-[11px] uppercase"
                 >
                   {user.login.charAt(0)}
                 </span>

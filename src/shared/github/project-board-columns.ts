@@ -90,7 +90,7 @@ export function buildBoardColumns(
     key: EMPTY_PROJECT_GROUP_KEY,
     label: `No ${field.name}`,
     color: null,
-    dropValue: null,
+    dropValue: field.kind === 'single-select' || field.kind === 'iteration' ? null : undefined,
     rows: bucketsByKey.get(EMPTY_PROJECT_GROUP_KEY)?.rows ?? []
   })
   return columns

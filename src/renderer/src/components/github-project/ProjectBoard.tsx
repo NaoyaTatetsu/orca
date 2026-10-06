@@ -2,13 +2,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
 import ProjectBoardCard from './ProjectBoardCard'
-import { singleSelectChipColors } from './project-cell-chip-colors'
+import { ProjectItemsEmptyState } from './ProjectViewStates'
+import { chipStyle, singleSelectChipColors } from './project-cell-chip-colors'
 import {
   buildBoardColumns,
   resolveBoardColumnField,
   type ProjectBoardColumn
 } from '../../../../shared/github/project-board-columns'
-import { sortRows } from '../../../../shared/github/project-group-sort'
+import { EMPTY_PROJECT_GROUP_KEY, sortRows } from '../../../../shared/github/project-group-sort'
 import type {
   GitHubProjectFieldMutationValue,
   GitHubProjectRow,
@@ -52,7 +53,12 @@ export default function ProjectBoard({
       const row = rowsById.get(rowId)
       // Why: dropValue undefined marks a column with nothing valid to mutate
       // into (deleted option, users/labels bucket) — the drop is simply inert.
-      if (!row || fieldId === null || column.dropValue === undefined) {
+      if (
+        !row ||
+        row.itemType === 'REDACTED' ||
+        fieldId === null ||
+        column.dropValue === undefined
+      ) {
         return
       }
       const current = row.fieldValuesByFieldId[fieldId]
@@ -114,7 +120,7 @@ export default function ProjectBoard({
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="flex-none border-b border-border/50 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
           {translate(
-            'auto.components.github.project.ProjectBoard.61a5e74e8a',
+            'projectBoard.noColumnField',
             'This board view has no single-select or iteration field to group by, so Orca is listing items instead.'
           )}
         </div>
@@ -124,14 +130,7 @@ export default function ProjectBoard({
   }
 
   if (table.rows.length === 0) {
-    return (
-      <div className="flex min-h-[120px] items-center justify-center p-6 text-sm text-muted-foreground">
-        {translate(
-          'auto.components.github.project.ProjectViewList.4f57d2e0b1',
-          "No items match this view's filter."
-        )}
-      </div>
-    )
+    return <ProjectItemsEmptyState filter={table.selectedView.filter} />
   }
 
   return (
@@ -142,9 +141,17 @@ export default function ProjectBoard({
       {columns.map((column) => (
         <BoardColumn
           key={column.key}
-          column={column}
+          column={
+            column.key === EMPTY_PROJECT_GROUP_KEY
+              ? {
+                  ...column,
+                  label: translate('projectBoard.noField', 'No {{field}}', { field: field.name })
+                }
+              : column
+          }
           highlighted={dropTarget === column.key}
           onOpenDialog={onOpenDialog}
+          onEditField={onEditField}
           onDragEnter={() => {
             if (column.dropValue !== undefined) {
               setDropTarget(column.key)
@@ -163,12 +170,14 @@ function BoardColumn({
   column,
   highlighted,
   onOpenDialog,
+  onEditField,
   onDragEnter,
   onDragLeaveOrEnd
 }: {
   column: ProjectBoardColumn
   highlighted: boolean
   onOpenDialog?: (row: GitHubProjectRow) => void
+  onEditField?: Props['onEditField']
   onDragEnter: () => void
   onDragLeaveOrEnd: () => void
 }): React.JSX.Element {
@@ -194,7 +203,10 @@ function BoardColumn({
         }
       }}
       onDragLeave={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+        if (
+          !(event.relatedTarget instanceof Node) ||
+          !event.currentTarget.contains(event.relatedTarget)
+        ) {
           onDragLeaveOrEnd()
         }
       }}
@@ -204,17 +216,14 @@ function BoardColumn({
           <span
             aria-hidden
             className="size-2 shrink-0 rounded-full bg-[var(--github-project-chip-fg-light)] dark:bg-[var(--github-project-chip-fg-dark)]"
-            style={
-              {
-                '--github-project-chip-fg-light': colors.fgLight,
-                '--github-project-chip-fg-dark': colors.fgDark,
-                boxShadow: `0 0 0 3px ${colors.bg}`
-              } as React.CSSProperties
-            }
+            style={{
+              ...chipStyle(colors),
+              boxShadow: `0 0 0 3px ${colors.bg}`
+            }}
           />
         ) : null}
         <span className="truncate font-medium">{column.label}</span>
-        <span className="rounded-full border border-border/50 bg-background px-1.5 text-[10px] text-muted-foreground">
+        <span className="rounded-full border border-border/50 bg-background px-1.5 text-[11px] text-muted-foreground">
           {column.rows.length}
         </span>
       </div>
@@ -223,14 +232,12 @@ function BoardColumn({
           <ProjectBoardCard
             key={row.id}
             row={row}
-            draggable={row.itemType !== 'REDACTED'}
+            draggable={Boolean(onEditField) && row.itemType !== 'REDACTED'}
             onOpenDialog={() => onOpenDialog?.(row)}
             onDragStart={(event) => {
               event.dataTransfer.setData(CARD_DRAG_MIME, row.id)
               event.dataTransfer.effectAllowed = 'move'
             }}
-            // Why: a cancelled drag (Esc, drop outside any column) fires no
-            // drop event anywhere — dragend is the only reliable cleanup hook.
           />
         ))}
       </div>

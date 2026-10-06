@@ -91,6 +91,33 @@ describe('verticalGroupByFields capability fallback', () => {
     expect(vi.mocked(runGraphql)).toHaveBeenCalledTimes(1)
   })
 
+  it('does not cache authorization or transient errors that mention the field', async () => {
+    vi.mocked(runGraphql)
+      .mockResolvedValueOnce({
+        ok: false,
+        error: { type: 'scope_missing', message: 'Not authorized' },
+        raw: {
+          stderr: '',
+          stdout: JSON.stringify({
+            errors: [{ message: 'Not authorized to access verticalGroupByFields' }]
+          })
+        }
+      })
+      .mockResolvedValue(okPage())
+    expect((await fetchProjectViewsPage(args)).ok).toBe(false)
+    expect(runGraphql).toHaveBeenCalledTimes(1)
+    await fetchProjectViewsPage(args)
+    expect(vi.mocked(runGraphql).mock.calls[1]?.[0]).toContain('verticalGroupByFields')
+  })
+
+  it('propagates a failed fallback and does not keep probing that host', async () => {
+    vi.mocked(runGraphql).mockResolvedValue(unknownFieldFailure())
+    expect((await fetchProjectViewsPage(args)).ok).toBe(false)
+    expect(runGraphql).toHaveBeenCalledTimes(2)
+    await fetchProjectViewsPage(args)
+    expect(runGraphql).toHaveBeenCalledTimes(3)
+  })
+
   it('does not treat the field name inside partial-error DATA as incapability', async () => {
     // Why: partial errors echo the whole body, where the field name appears as
     // a plain data key on healthy schemas — that must not degrade the host.
