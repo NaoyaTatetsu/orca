@@ -2,6 +2,16 @@ import { test, expect } from './helpers/orca-app'
 import { waitForSessionReady } from './helpers/store'
 import { githubProjectIdentityKey } from '../../src/shared/github/project-identity'
 import type { GitHubProjectTable } from '../../src/shared/github/project-types'
+import type {
+  ClearProjectItemFieldArgs,
+  UpdateProjectItemFieldArgs
+} from '../../src/shared/github/project-request-types'
+
+type BoardFieldCall = UpdateProjectItemFieldArgs | ClearProjectItemFieldArgs
+
+declare global {
+  var __githubProjectBoardCalls: BoardFieldCall[] | undefined
+}
 
 const project = { owner: 'board-proof', ownerType: 'user', number: 1, host: 'github.com' } as const
 const board: GitHubProjectTable = {
@@ -85,8 +95,8 @@ test('board drops cross preload, settle optimistically, and roll back failures',
       ipcMain.removeHandler(channel)
       ipcMain.handle(channel, handler)
     }
-    const calls: unknown[] = []
-    Reflect.set(globalThis, '__boardCalls', calls)
+    const calls: BoardFieldCall[] = []
+    globalThis.__githubProjectBoardCalls = calls
     ipcMain.removeHandler('gh:updateProjectItemField')
     ipcMain.handle('gh:updateProjectItemField', async (_event, args) => {
       calls.push(args)
@@ -152,7 +162,7 @@ test('board drops cross preload, settle optimistically, and roll back failures',
   await expect(done.getByRole('button', { name: title })).toBeVisible()
   await expect(todo.getByRole('button', { name: title })).toHaveCount(0)
   await expect
-    .poll(() => electronApp.evaluate(() => Reflect.get(globalThis, '__boardCalls')))
+    .poll(() => electronApp.evaluate(() => globalThis.__githubProjectBoardCalls))
     .toEqual([
       {
         projectId: 'project',
@@ -169,8 +179,17 @@ test('board drops cross preload, settle optimistically, and roll back failures',
   await expect(done.getByRole('button', { name: title })).toBeVisible()
   await expect(empty.getByRole('button', { name: title })).toHaveCount(0)
   await expect
-    .poll(() => electronApp.evaluate(() => Reflect.get(globalThis, '__boardCalls')))
-    .toHaveLength(2)
+    .poll(() => electronApp.evaluate(() => globalThis.__githubProjectBoardCalls))
+    .toEqual([
+      {
+        projectId: 'project',
+        host: 'github.com',
+        itemId: 'row',
+        fieldId: 'status',
+        value: { kind: 'single-select', optionId: 'done' }
+      },
+      { projectId: 'project', host: 'github.com', itemId: 'row', fieldId: 'status' }
+    ])
   await orcaPage.screenshot({ path: testInfo.outputPath('board-rollback.png') })
   await orcaPage.evaluate(() => document.documentElement.classList.remove('dark'))
   await orcaPage.screenshot({ path: testInfo.outputPath('board-light.png') })
