@@ -171,6 +171,38 @@ describe('project field writes', () => {
     expect(mockApi.gh.updateProjectItemField).toHaveBeenCalledTimes(2)
   })
 
+  it('keeps the confirmed baseline when failed writes switch between cached views', async () => {
+    const store = setup()
+    const otherKey = projectViewCacheKey('user', 'owner', 1, 'other-view')
+    const other = fixture()
+    other.selectedView.id = 'other-view'
+    store.setState({
+      projectViewCache: {
+        ...store.getState().projectViewCache,
+        [otherKey]: { data: other, fetchedAt: 1 }
+      }
+    })
+    const first = deferred()
+    mockApi.gh.updateProjectItemField
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce(failed)
+    mockApi.gh.clearProjectItemField.mockResolvedValueOnce(failed)
+    const update1 = store
+      .getState()
+      .updateProjectFieldValue(key, 'row', 'status', { kind: 'single-select', optionId: 'done' })
+    const update2 = store.getState().updateProjectFieldValue(otherKey, 'row', 'status', {
+      kind: 'single-select',
+      optionId: 'done'
+    })
+    const clear = store.getState().clearProjectFieldValue(key, 'row', 'status')
+    first.resolve(failed)
+    await Promise.all([update1, update2, clear])
+    expect(field(store)).toMatchObject({ optionId: 'todo' })
+    expect(
+      store.getState().projectViewCache[otherKey]?.data?.rows[0]?.fieldValuesByFieldId.status
+    ).toMatchObject({ optionId: 'todo' })
+  })
+
   it('keeps identical item IDs on different GitHub hosts independent', async () => {
     const store = setup()
     const otherKey = projectViewCacheKey(

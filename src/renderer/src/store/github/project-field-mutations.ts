@@ -22,7 +22,7 @@ export function createProjectFieldActions(
     tail: Promise<GitHubProjectMutationResult> | null
     confirmed: GitHubProjectFieldValue | undefined
     revisionsByCache: Map<string, number>
-    baselineView: GitHubProjectView | undefined
+    baselineViewsByCache: Map<string, GitHubProjectView | undefined>
   }
   const pending = new Map<string, FieldWrite>()
 
@@ -134,12 +134,16 @@ export function createProjectFieldActions(
       tail: null,
       revisionsByCache: new Map<string, number>(),
       confirmed: current,
-      baselineView: table?.selectedView
+      baselineViewsByCache: new Map([[cacheKey, table?.selectedView]])
     }
-    if (table && write.baselineView !== table.selectedView) {
+    if (
+      table &&
+      write.baselineViewsByCache.has(cacheKey) &&
+      write.baselineViewsByCache.get(cacheKey) !== table.selectedView
+    ) {
       write.confirmed = current
-      write.baselineView = table.selectedView
     }
+    write.baselineViewsByCache.set(cacheKey, table?.selectedView)
     const request = mutate(cacheKey, rowId, fieldId, value, write)
     write.tail = request
     pending.set(key, write)
