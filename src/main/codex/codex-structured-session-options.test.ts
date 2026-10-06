@@ -1,3 +1,5 @@
+import { createCodexDispatchEchoes } from './codex-structured-dispatch-echo'
+import { createCodexTurnOpenWaits } from './codex-structured-turn-open-wait'
 import { describe, expect, it, vi } from 'vitest'
 import type { CodexAppServerConnection } from './codex-app-server-connection'
 import { CodexAcquisitionWindow } from './codex-structured-acquisition-window'
@@ -25,16 +27,15 @@ function optionSession(request: CodexAppServerConnection['request']): CodexSessi
     },
     backgroundTasks: new CodexBackgroundTaskTracker('thread-1'),
     ended: false,
-    requestedClose: false,
     fence: 1,
     acquisitionGeneration: 'generation-1',
     threadId: 'thread-1',
-    historyPath: null,
     prompts: new CodexAcquisitionWindow().prompts,
     options: new Map(),
     reportedOptions: { model: 'gpt-live', effort: 'high' },
     fastModeTierByModel: new Map(),
-    turnIdWaiters: [],
+    dispatchEchoes: createCodexDispatchEchoes(),
+    turnOpenWaits: createCodexTurnOpenWaits(),
     translator: null
   }
 }
@@ -46,6 +47,7 @@ describe('structured Codex session options', () => {
         restoredCodexSessionOptions({
           model: 'gpt-live',
           effort: 'high',
+          approvalPolicy: 'never',
           threadId: 'thread-injected',
           input: 'input-injected'
         })
@@ -133,7 +135,6 @@ describe('structured Codex session options', () => {
     expect(
       reportedCodexThreadOptions({
         threadId: 'thread-1',
-        historyPath: null,
         model: 'gpt-live',
         effort: 'high'
       })

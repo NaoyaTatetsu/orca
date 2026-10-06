@@ -1,4 +1,5 @@
 import { basename, joinPath } from '@/lib/path'
+import type { ImportItemResult } from '../../../shared/filesystem-import-result-types'
 import { getRuntimeEnvironmentConnectionGeneration } from '@/store/slices/runtime-status'
 import type { RuntimeFileOperationArgs } from './runtime-file-client-types'
 import { captureRuntimeEnvironmentRequestRevision } from './runtime-environment-revision'
@@ -20,51 +21,20 @@ import {
 } from './runtime-file-upload-client'
 import { getActiveRuntimeTarget } from './runtime-rpc-client'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
-
-type StagedRuntimeImportSource =
-  | {
-      sourcePath: string
-      status: 'staged'
-      name: string
-      kind: 'file' | 'directory'
-      entries: StagedRuntimeImportEntry[]
-    }
-  | {
-      sourcePath: string
-      status: 'skipped'
-      reason: 'missing' | 'symlink' | 'permission-denied' | 'unsupported'
-    }
-  | { sourcePath: string; status: 'failed'; reason: string }
-
-type StagedRuntimeImportEntry =
-  | { relativePath: string; kind: 'directory' }
-  | { relativePath: string; kind: 'file'; contentBase64: string }
-
-type RuntimeImportResult =
-  | {
-      sourcePath: string
-      status: 'imported'
-      destPath: string
-      kind: 'file' | 'directory'
-      renamed: boolean
-    }
-  | {
-      sourcePath: string
-      status: 'skipped'
-      reason: 'missing' | 'symlink' | 'permission-denied' | 'unsupported'
-    }
-  | {
-      sourcePath: string
-      status: 'failed'
-      reason: string
-    }
+import type { LocalFileAccess } from '../../../shared/local-file-access'
+import { localAccess } from './runtime-file-read-client'
 
 export async function importExternalPathsToRuntime(
   context: RuntimeFileOperationArgs,
   sourcePaths: string[],
   destinationDir: string,
-  options?: { ensureDestinationDir?: boolean; assertCurrent?: () => void }
-): Promise<{ results: RuntimeImportResult[] }> {
+  options?: {
+    ensureDestinationDir?: boolean
+    assertCurrent?: () => void
+    /** Local imports only; remote destinations stay root-relative. */
+    access?: LocalFileAccess
+  }
+): Promise<{ results: ImportItemResult[] }> {
   const target = getActiveRuntimeTarget(context.settings)
   if (target.kind !== 'environment' || !context.worktreeId || !context.worktreePath) {
     return window.api.fs.importExternalPaths(
@@ -72,7 +42,8 @@ export async function importExternalPathsToRuntime(
         sourcePaths,
         destDir: destinationDir,
         connectionId: context.connectionId,
-        ensureDir: options?.ensureDestinationDir
+        ensureDir: options?.ensureDestinationDir,
+        ...localAccess(context.connectionId, options?.access)
       })
     )
   }
@@ -108,12 +79,12 @@ export async function importExternalPathsToRuntime(
   importSession.assertCurrent()
   const staged = await window.api.fs.stageExternalPathsForRuntimeUpload({ sourcePaths })
   importSession.assertCurrent()
-  const results: RuntimeImportResult[] = []
+  const results: ImportItemResult[] = []
   const reservedNames = new Set<string>()
 
   await ensureRuntimeDirectory(context, destinationDir, importSession)
 
-  for (const source of staged.sources as StagedRuntimeImportSource[]) {
+  for (const source of staged.sources) {
     if (source.status !== 'staged') {
       results.push(source)
       continue
@@ -150,7 +121,16 @@ export async function importExternalPathsToRuntime(
           importSession,
           context.worktreeId,
           entryRelativePath,
-          entry.contentBase64,
+          {
+            sourceRootPath: source.sourcePath,
+            entryRelativePath: entry.relativePath,
+            expected: {
+              byteLength: entry.byteLength,
+              inode: entry.inode,
+              deviceId: entry.deviceId,
+              modifiedAtMs: entry.modifiedAtMs
+            }
+          },
           context.expectedSshConnectionGeneration,
           context.expectedSshTargetId,
           context.expectedExecutionHostId ??
