@@ -11,8 +11,7 @@ export function optimisticFieldValueFromMutation(
   fieldId: string,
   value: GitHubProjectFieldMutationValue
 ): GitHubProjectTable['rows'][number]['fieldValuesByFieldId'][string] | null {
-  // Why: a board's column field need not be a visible view field — without the
-  // vertical/group config in this lookup, board drops patch empty-named chips.
+  // Board column fields can be hidden from the view's visible fields.
   const field = [
     ...table.selectedView.fields,
     ...(table.selectedView.verticalGroupByFields ?? []),

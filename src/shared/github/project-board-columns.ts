@@ -1,6 +1,3 @@
-// Why: board columns are deterministic shared logic like grouping — the field
-// choice and bucket order must not depend on the renderer, so desktop (and a
-// future mobile board) derive identical columns from the same view.
 import { EMPTY_PROJECT_GROUP_KEY, groupRowsByField } from './project-group-sort'
 import type {
   GitHubProjectField,
@@ -15,31 +12,23 @@ export type ProjectBoardColumn = {
   label: string
   /** GitHub single-select color token ('GREEN', …) when the column is one. */
   color: string | null
-  /** Field mutation that moves a card into this column. `null` clears the
-   *  field (the no-value column); `undefined` means the column kind cannot be
-   *  a drop target (users/labels/text buckets). */
+  /** undefined is read-only; null clears the field. */
   dropValue: GitHubProjectFieldMutationValue | null | undefined
   rows: GitHubProjectRow[]
 }
 
 export function resolveBoardColumnField(view: GitHubProjectView): GitHubProjectField | null {
   const vertical = view.verticalGroupByFields?.[0]
-  // Why: only these kinds yield real drop targets — a drifted non-select field
-  // here would render read-only buckets whose no-value column still CLEARS an
-  // arbitrary field on drop. Fall back to Status instead.
+  // Non-select fields must never expose clear-only drop targets.
   if (vertical && (vertical.kind === 'single-select' || vertical.kind === 'iteration')) {
     return vertical
   }
-  // Why: views cached before `verticalGroupByFields` was queried (or hosts
-  // whose schema lacks it) still describe a board — GitHub's default board
-  // column field is Status, then any single-select carries the same shape.
+  // Older hosts omit vertical grouping; Status is GitHub's default.
   const singleSelects = view.fields.filter((field) => field.kind === 'single-select')
   return singleSelects.find((field) => /^status$/i.test(field.name)) ?? singleSelects[0] ?? null
 }
 
-/** Builds the column list: every single-select option gets a column in option
- *  order (empty ones included, matching github.com), rows pointing at deleted
- *  options keep their own labeled column, and the no-value column trails. */
+/** Includes empty options, deleted-option buckets, and a final unset bucket. */
 export function buildBoardColumns(
   field: GitHubProjectField,
   rowsInOrder: GitHubProjectRow[]
@@ -70,10 +59,7 @@ export function buildBoardColumns(
       bucketsByKey.delete(iteration.id)
     }
   }
-  // Remaining buckets: non-select fields entirely, or values whose option or
-  // iteration was deleted after assignment — keep them visible, not mislabeled.
-  // Why undefined dropValue: there is nothing valid to mutate a card INTO here
-  // (a deleted option id would be rejected; users/labels moves are ambiguous).
+  // Preserve deleted options as read-only columns.
   for (const bucket of buckets) {
     if (!bucketsByKey.has(bucket.key) || bucket.key === EMPTY_PROJECT_GROUP_KEY) {
       continue

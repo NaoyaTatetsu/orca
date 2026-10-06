@@ -18,8 +18,6 @@ export default function ProjectBoardCard({
   onDragStart
 }: Props): React.JSX.Element {
   const restricted = row.itemType === 'REDACTED'
-  // Why: mirrors the roadmap bar — a redacted card must never render or
-  // announce an empty name.
   const title = restricted
     ? translate('projectBoardCard.restrictedItem', 'Restricted item')
     : row.content.title

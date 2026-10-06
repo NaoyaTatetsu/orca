@@ -65,8 +65,7 @@ function ProjectViewBody({
   rowActions: ReturnType<typeof useProjectRowActions>
 }): React.JSX.Element | null {
   const { activeProject, error, loading, table, visibleTable } = tableState
-  // Why: an inline arrow here would defeat ProjectBoard's moveRow memoization
-  // and re-register its document drop listener on every wrapper render.
+  // Keep the board's document drop subscription stable across wrapper renders.
   const { editField } = rowActions
   const onEditField = useCallback(
     (row: GitHubProjectRow, fieldId: string, value: GitHubProjectFieldMutationValue | null) =>

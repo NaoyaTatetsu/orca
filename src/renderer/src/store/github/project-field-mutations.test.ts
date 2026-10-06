@@ -143,6 +143,90 @@ describe('project field writes', () => {
     }
   )
 
+  it('serializes the same item field across different views of a project', async () => {
+    const store = setup()
+    const otherKey = projectViewCacheKey('user', 'owner', 1, 'other-view')
+    const other = fixture()
+    other.selectedView.id = 'other-view'
+    store.setState({
+      projectViewCache: {
+        ...store.getState().projectViewCache,
+        [otherKey]: { data: other, fetchedAt: 1 }
+      }
+    })
+    const first = deferred()
+    mockApi.gh.updateProjectItemField
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce({ ok: true })
+    const update1 = store
+      .getState()
+      .updateProjectFieldValue(key, 'row', 'status', { kind: 'single-select', optionId: 'done' })
+    const update2 = store.getState().updateProjectFieldValue(otherKey, 'row', 'status', {
+      kind: 'single-select',
+      optionId: 'todo'
+    })
+    await vi.waitFor(() => expect(mockApi.gh.updateProjectItemField).toHaveBeenCalledTimes(1))
+    first.resolve({ ok: true })
+    await Promise.all([update1, update2])
+    expect(mockApi.gh.updateProjectItemField).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps identical item IDs on different GitHub hosts independent', async () => {
+    const store = setup()
+    const otherKey = projectViewCacheKey(
+      'user',
+      'owner',
+      1,
+      'view',
+      undefined,
+      'local',
+      'ghe.example'
+    )
+    const other = fixture()
+    other.project.host = 'ghe.example'
+    store.setState({
+      projectViewCache: {
+        ...store.getState().projectViewCache,
+        [otherKey]: { data: other, fetchedAt: 1 }
+      }
+    })
+    const first = deferred()
+    mockApi.gh.updateProjectItemField
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce({ ok: true })
+    const update1 = store
+      .getState()
+      .updateProjectFieldValue(key, 'row', 'status', { kind: 'single-select', optionId: 'done' })
+    const update2 = store.getState().updateProjectFieldValue(otherKey, 'row', 'status', {
+      kind: 'single-select',
+      optionId: 'done'
+    })
+    await vi.waitFor(() => expect(mockApi.gh.updateProjectItemField).toHaveBeenCalledTimes(2))
+    first.resolve({ ok: true })
+    await Promise.all([update1, update2])
+  })
+
+  it('preserves a successful edit to a different field when status rolls back', async () => {
+    const store = setup()
+    const first = deferred()
+    mockApi.gh.updateProjectItemField
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce({ ok: true })
+    const update1 = store
+      .getState()
+      .updateProjectFieldValue(key, 'row', 'status', { kind: 'single-select', optionId: 'done' })
+    const update2 = store
+      .getState()
+      .updateProjectFieldValue(key, 'row', 'notes', { kind: 'text', text: 'Keep this' })
+    await vi.waitFor(() => expect(mockApi.gh.updateProjectItemField).toHaveBeenCalledTimes(2))
+    first.resolve(failed)
+    await Promise.all([update1, update2])
+    expect(field(store)).toMatchObject({ optionId: 'todo' })
+    expect(
+      store.getState().projectViewCache[key]?.data?.rows[0]?.fieldValuesByFieldId.notes
+    ).toMatchObject({ text: 'Keep this' })
+  })
+
   it('does not roll back a newer clear when two clear requests overlap', async () => {
     const store = setup()
     const first = deferred()
@@ -170,6 +254,29 @@ describe('project field writes', () => {
     expect(await request).toMatchObject({ ok: false, error: { message: 'Transport closed' } })
     expect(field(store)).toMatchObject({ optionId: 'todo' })
     expect(store.getState().projectViewCache[key]?.data?.rows[0]?.content.title).toBe('Edited')
+  })
+
+  it('uses a refreshed value as the rollback baseline for a subsequently queued edit', async () => {
+    const store = setup()
+    const first = deferred()
+    mockApi.gh.updateProjectItemField.mockReturnValueOnce(first.promise)
+    mockApi.gh.clearProjectItemField.mockResolvedValueOnce(failed)
+    const update = store
+      .getState()
+      .updateProjectFieldValue(key, 'row', 'status', { kind: 'single-select', optionId: 'done' })
+    const refreshed = fixture()
+    refreshed.rows[0].fieldValuesByFieldId.status = {
+      kind: 'single-select',
+      fieldId: 'status',
+      optionId: 'doing',
+      name: 'Doing',
+      color: 'YELLOW'
+    }
+    store.setState({ projectViewCache: { [key]: { data: refreshed, fetchedAt: 2 } } })
+    const clear = store.getState().clearProjectFieldValue(key, 'row', 'status')
+    first.resolve(failed)
+    await Promise.all([update, clear])
+    expect(field(store)).toMatchObject({ optionId: 'doing' })
   })
 
   it('preserves an authoritative refresh instead of rolling back a failed clear', async () => {

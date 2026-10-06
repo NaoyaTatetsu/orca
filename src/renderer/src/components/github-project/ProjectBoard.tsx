@@ -51,8 +51,7 @@ export default function ProjectBoard({
   const moveRow = useCallback(
     (rowId: string, column: ProjectBoardColumn): void => {
       const row = rowsById.get(rowId)
-      // Why: dropValue undefined marks a column with nothing valid to mutate
-      // into (deleted option, users/labels bucket) — the drop is simply inert.
+      // Deleted options and read-only buckets have no valid mutation target.
       if (
         !row ||
         row.itemType === 'REDACTED' ||
@@ -78,15 +77,10 @@ export default function ProjectBoard({
     [rowsById, fieldId, onEditField]
   )
 
-  // Why: Orca's preload stops every native drop with stopPropagation before it
-  // reaches React's root, so — like the workspace kanban — board drops must
-  // commit from a document-level CAPTURE listener (same node as preload's, so
-  // it still runs; React onDrop never would).
+  // Preload stops bubbling drops; commit from capture on the same document.
   useEffect(() => {
     const columnsByKey = new Map(columns.map((column) => [column.key, column]))
     const handleDocumentDrop = (event: DragEvent): void => {
-      // Why: any drop ends the drag — clear the hover highlight even for
-      // payload-less drops so no column is left stuck in its hover state.
       setDropTarget(null)
       const rowId = event.dataTransfer?.getData(CARD_DRAG_MIME)
       if (!rowId) {
@@ -104,8 +98,7 @@ export default function ProjectBoard({
       event.preventDefault()
       moveRow(rowId, column)
     }
-    // Why: a mid-drag re-render can detach the source card, and Chromium may
-    // never deliver its dragend — clean up at the document, not the card.
+    // Esc and drops outside the board still clear the hover state.
     const handleDocumentDragEnd = (): void => setDropTarget(null)
     document.addEventListener('drop', handleDocumentDrop, true)
     document.addEventListener('dragend', handleDocumentDragEnd, true)

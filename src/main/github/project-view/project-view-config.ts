@@ -44,10 +44,7 @@ export type RawProjectView = {
   }
 }
 
-// Why: older GHES ProjectV2 schemas predate `verticalGroupByFields`; one
-// unknown-field error there would break EVERY project view on that host. Track
-// the incapability per host and retry the views query without the selection —
-// the board renderer falls back to the Status field when config is absent.
+// Older GHES hosts omit vertical grouping so one missing field cannot break all views.
 const hostsWithoutVerticalGroupBy = new Set<string>()
 
 /** Test-only: capability state is module-level so real runs memoize per host. */
@@ -62,9 +59,7 @@ function verticalGroupBySelection(host: string | undefined): string {
 }
 
 function errorsIndicateVerticalGroupBy(raw: { stderr: string; stdout: string }): boolean {
-  // Why: partial-error responses echo the whole data body in raw.stdout, which
-  // contains this field name as a plain KEY on perfectly healthy schemas — only
-  // the parsed GraphQL error messages can identify an unknown-field rejection.
+  // Partial-error data can echo the field name even when the schema supports it.
   return extractGraphqlErrors(raw.stderr, raw.stdout).some(
     (error) =>
       /\bverticalGroupByFields\b/.test(error.message ?? '') &&
@@ -259,8 +254,7 @@ export function finalizeView(
       fields,
       groupByFields,
       sortByFields,
-      // Why: only attach when present so old cached payloads and schema-less
-      // hosts keep the exact shape the optional wire field promises.
+      // Preserve absence for older hosts and cached payloads.
       ...(raw.verticalGroupByFields ? { verticalGroupByFields } : {})
     }
   }

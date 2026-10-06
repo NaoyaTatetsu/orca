@@ -3,13 +3,15 @@ import type { AppState } from '../types'
 import type { GitHubSlice } from './slice-types'
 import type {
   GitHubProjectFieldMutationValue,
-  GitHubProjectFieldValue
+  GitHubProjectFieldValue,
+  GitHubProjectView
 } from '../../../../shared/github/project-types'
 import type { GitHubProjectMutationResult } from '../../../../shared/github/project-result-types'
 import { translate } from '@/i18n/i18n'
 import { callRuntimeRpc, getActiveRuntimeTarget } from '../../runtime/runtime-rpc-client'
-import { settingsForProjectViewCacheKey } from './cache-identity'
+import { projectViewSourceScope, settingsForProjectViewCacheKey } from './cache-identity'
 import { applyRowPatch, optimisticFieldValueFromMutation } from './project-cache'
+import { githubProjectHost } from '../../../../shared/github/project-identity'
 
 export function createProjectFieldActions(
   set: Parameters<StateCreator<AppState>>[0],
@@ -19,7 +21,8 @@ export function createProjectFieldActions(
   type FieldWrite = {
     tail: Promise<GitHubProjectMutationResult> | null
     confirmed: GitHubProjectFieldValue | undefined
-    revision: number
+    revisionsByCache: Map<string, number>
+    baselineView: GitHubProjectView | undefined
   }
   const pending = new Map<string, FieldWrite>()
 
@@ -30,7 +33,8 @@ export function createProjectFieldActions(
     value: GitHubProjectFieldMutationValue | null,
     write: FieldWrite
   ): Promise<GitHubProjectMutationResult> => {
-    const revision = ++write.revision
+    const revision = (write.revisionsByCache.get(cacheKey) ?? 0) + 1
+    write.revisionsByCache.set(cacheKey, revision)
     const table = get().projectViewCache[cacheKey]?.data
     const row = table?.rows.find((candidate) => candidate.id === rowId)
     if (!table || !row) {
@@ -95,7 +99,7 @@ export function createProjectFieldActions(
       // A refresh owns its new value; rollback only our field and preserve concurrent content edits.
       if (
         current &&
-        write.revision === revision &&
+        write.revisionsByCache.get(cacheKey) === revision &&
         currentTable?.selectedView === table.selectedView &&
         current.fieldValuesByFieldId[fieldId] === (next ?? undefined)
       ) {
@@ -117,12 +121,24 @@ export function createProjectFieldActions(
     fieldId: string,
     value: GitHubProjectFieldMutationValue | null
   ): Promise<GitHubProjectMutationResult> => {
-    const key = JSON.stringify([cacheKey, rowId, fieldId])
+    const table = get().projectViewCache[cacheKey]?.data
+    const key = JSON.stringify([
+      projectViewSourceScope(settingsForProjectViewCacheKey(get().settings, cacheKey)),
+      githubProjectHost(table?.project.host).toLowerCase(),
+      table?.project.id ?? cacheKey,
+      rowId,
+      fieldId
+    ])
+    const current = table?.rows.find((row) => row.id === rowId)?.fieldValuesByFieldId[fieldId]
     const write = pending.get(key) ?? {
       tail: null,
-      revision: 0,
-      confirmed: get().projectViewCache[cacheKey]?.data?.rows.find((row) => row.id === rowId)
-        ?.fieldValuesByFieldId[fieldId]
+      revisionsByCache: new Map<string, number>(),
+      confirmed: current,
+      baselineView: table?.selectedView
+    }
+    if (table && write.baselineView !== table.selectedView) {
+      write.confirmed = current
+      write.baselineView = table.selectedView
     }
     const request = mutate(cacheKey, rowId, fieldId, value, write)
     write.tail = request
